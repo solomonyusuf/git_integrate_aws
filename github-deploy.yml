@@ -1,0 +1,204 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  AWS Lambda + API Gateway setup for GitHub OAuth and Repo Deployment.
+
+Parameters:
+  GitHubClientId:
+    Type: String
+    Description: GitHub OAuth App Client ID
+  GitHubClientSecret:
+    Type: String
+    Description: GitHub OAuth App Client Secret
+  DeployBucket:
+    Type: String
+    Description: S3 bucket name to deploy repos to
+  Region:
+    Type: String
+    Default: eu-north-1
+    Description: AWS Region
+
+Resources:
+
+  # IAM Role for both Lambdas
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: github-deploy-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Policies:
+        - PolicyName: github-deploy-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub arn:aws:s3:::${DeployBucket}/*
+
+  # GitHub OAuth Lambda
+  GitHubOAuthLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: GitHubOAuthHandler
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 15
+      Environment:
+        Variables:
+          GITHUB_CLIENT_ID: !Ref GitHubClientId
+          GITHUB_CLIENT_SECRET: !Ref GitHubClientSecret
+          REDIRECT_URI: !Sub https://${ApiGatewayRestApi}.execute-api.${Region}.amazonaws.com/prod/oauth/callback
+      Code:
+        ZipFile: |
+          import fetch from "node-fetch";
+          export const handler = async (event) => {
+            const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
+            const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
+            const REDIRECT_URI = process.env.REDIRECT_URI;
+            const path = event.path;
+            const query = event.queryStringParameters || {};
+            if (path.endsWith("/login")) {
+              const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=repo,user`;
+              return { statusCode: 302, headers: { Location: url } };
+            }
+            if (path.endsWith("/callback")) {
+              const code = query.code;
+              const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, client_secret: GITHUB_CLIENT_SECRET, code, redirect_uri: REDIRECT_URI }),
+              });
+              const tokenData = await tokenRes.json();
+              return { statusCode: 200, body: JSON.stringify(tokenData) };
+            }
+            return { statusCode: 404, body: "Not Found" };
+          };
+
+  # Repo Deploy Lambda
+  RepoDeployLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: RepoDeployHandler
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          DEPLOY_BUCKET: !Ref DeployBucket
+          AWS_REGION: !Ref Region
+      Code:
+        ZipFile: |
+          import fetch from "node-fetch";
+          import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+          import AdmZip from "adm-zip";
+          const s3 = new S3Client({ region: process.env.AWS_REGION });
+          export const handler = async (event) => {
+            const body = JSON.parse(event.body || "{}");
+            const { repoFullName, folderPath, branch = "main", githubToken } = body;
+            if (!repoFullName || !folderPath || !githubToken)
+              return { statusCode: 400, body: "Missing parameters" };
+            const res = await fetch(`https://api.github.com/repos/${repoFullName}/zipball/${branch}`, {
+              headers: { Authorization: `token ${githubToken}`, Accept: "application/vnd.github.v3+json" },
+            });
+            const arrayBuffer = await res.arrayBuffer();
+            const zip = new AdmZip(Buffer.from(arrayBuffer));
+            const extracted = zip.getEntries().filter((e) => e.entryName.includes(folderPath));
+            const folderZip = new AdmZip();
+            extracted.forEach((f) => folderZip.addFile(f.entryName.replace(folderPath, ""), f.getData()));
+            const key = `${repoFullName.replace("/", "_")}_${folderPath}.zip`;
+            await s3.send(new PutObjectCommand({ Bucket: process.env.DEPLOY_BUCKET, Key: key, Body: folderZip.toBuffer() }));
+            return { statusCode: 200, body: JSON.stringify({ success: true, s3_key: key }) };
+          };
+
+  # API Gateway
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: GitHubDeployAPI
+      Description: API for GitHub OAuth + Repo Deployment
+
+  ApiGatewayResourceOAuth:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+      PathPart: oauth
+      RestApiId: !Ref ApiGatewayRestApi
+
+  ApiGatewayResourceDeploy:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+      PathPart: deploy
+      RestApiId: !Ref ApiGatewayRestApi
+
+  # Methods
+  OAuthProxy:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResourceOAuth
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${GitHubOAuthLambda.Arn}/invocations
+
+  DeployProxy:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      ResourceId: !Ref ApiGatewayResourceDeploy
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${RepoDeployLambda.Arn}/invocations
+
+  # Deployment Stage
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - OAuthProxy
+      - DeployProxy
+    Properties:
+      RestApiId: !Ref ApiGatewayRestApi
+      StageName: prod
+
+  # Lambda Permissions
+  LambdaPermissionOAuth:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GitHubOAuthLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/*/oauth
+
+  LambdaPermissionDeploy:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RepoDeployLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/deploy
+
+Outputs:
+  ApiBaseUrl:
+    Description: API base URL
+    Value: !Sub https://${ApiGatewayRestApi}.execute-api.${Region}.amazonaws.com/prod
