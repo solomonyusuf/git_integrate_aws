@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: GitHub Repos Fetch Lambda
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 20
+    MemorySize: 256
+Resources:
+  FetchGitHubReposLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.handler
+      Environment:
+        Variables:
+          GITHUB_CLIENT_ID: Ov23li1hTQlkn4BALtEq
+          GITHUB_CLIENT_SECRET: 10f141255a59e3ce8ef5be3f2a55186f6c8cdc88
+      Events:
+        ReposApi:
+          Type: Api
+          Properties:
+            Path: /repos
+            Method: get
+      CodeUri: FetchGitHubReposLambda
+    Metadata:
+      SamResourceId: FetchGitHubReposLambda
+Outputs:
+  FetchGitHubReposApiUrl:
+    Description: API Gateway endpoint to fetch GitHub repos
+    Value:
+      Fn::Sub: https://${FetchGitHubReposLambda}.execute-api.${AWS::Region}.amazonaws.com/Prod/repos
