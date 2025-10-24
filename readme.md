@@ -1,11 +1,15 @@
 ## Frontend App
 
   └─> /auth/oauth (redirect by GitHub)
+  
   └─> /user/repo (handled by Lambda 2)
+  
   └─> /deploy (handled by Lambda 3)
 
 Lambda OAuth 1 → GitHub OAuth Flow → returns Access Token 
+
 Lambda Repo 2 →  returns list of user repo  
+
 Lambda Deploy 3 → GitHub API + AWS S3 SDK → deploys folder contents
 
 ## Frontend OAuth Flow
