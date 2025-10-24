@@ -23,9 +23,18 @@ exports.handler = async (event) => {
 
     const tokenData = await tokenRes.json();
 
-    // Return token data
-    return { statusCode: 200, body: JSON.stringify(tokenData) };
-  } catch (err) {
+    const params = new URLSearchParams(tokenData).toString();
+
+    return {
+      statusCode: 302, // HTTP redirect
+      headers: {
+        Location: `https://amazing-jalebi-3be205.netlify.app/authorize?${params}`,
+      },
+    };
+
+  } 
+  catch (err) 
+  {
     console.error(err);
     return { statusCode: 500, body: "Internal Server Error" };
   }
