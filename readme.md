@@ -18,10 +18,6 @@ Basically our frontend goes to github to authorize our user : https://github.com
 
 
 
-Github redirect us to this endpoint which is our lambda function:
-https://your-api-gateway.amazonaws.com/auth/callback?code=abc123
-
-
 
 
 
