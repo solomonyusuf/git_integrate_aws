@@ -28,7 +28,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 302, // HTTP redirect
       headers: {
-        Location: `https://amazing-jalebi-3be205.netlify.app/authorize?${params}`,
+        Location: `https://cosmic-biscochitos-de66d5.netlify.app/authorize?${params}`,
       },
     };
 
