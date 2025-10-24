@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Deploy selected GitHub repo folder to S3 (isolated API)
+Description: Deploy GitHub repo folder to S3 (isolated API)
 Globals:
   Function:
-    Timeout: 30
+    Timeout: 900
     Runtime: nodejs18.x
     MemorySize: 512
 Resources:
@@ -20,10 +20,10 @@ Resources:
       CodeUri: DeployRepoLambda
       Environment:
         Variables:
-          BUCKET_NAME: my-potentx-deployments
+          BUCKET_NAME: integration-deploy-solomonyusuf
       Policies:
       - S3FullAccessPolicy:
-          BucketName: my-potentx-deployments
+          BucketName: integration-deploy-solomonyusuf
       Events:
         ApiEvent:
           Type: Api
