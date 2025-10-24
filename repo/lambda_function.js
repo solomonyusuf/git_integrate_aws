@@ -9,7 +9,7 @@ exports.handler = async (event) => {
     }
 
     // Fetch the user's repositories
-    const reposResponse = await fetch("https://api.github.com/user/repos?per_page=20", {
+    const reposResponse = await fetch("https://api.github.com/user/repos?per_page=200", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         Accept: "application/vnd.github+json",

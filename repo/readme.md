@@ -2,6 +2,11 @@
 
 sam deploy --stack-name github-fetch-repos --s3-bucket my-potentx-sam-artifacts-20251022 --capabilities CAPABILITY_IAM --region eu-north-1 --no-confirm-changeset
 
+# To Call
+
+curl "https://3weepmofw3.execute-api.eu-north-1.amazonaws.com/Prod/repos?token=YOUR_GITHUB_ACCESS_TOKEN"
+
+
 # Sample Response
 
 {
@@ -2720,4 +2725,4 @@ sam deploy --stack-name github-fetch-repos --s3-bucket my-potentx-sam-artifacts-
       ]
     }
   ]
-}
+}a

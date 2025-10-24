@@ -16,6 +16,36 @@ Resources:
       StageName: Prod
       EndpointConfiguration: REGIONAL
 
+  #Table for file uploads
+  RepoUploadsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: RepoUploads
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: file_name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: file_name
+          KeyType: RANGE
+
+  #Table for user info cache
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Users
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+
   DeployRepoLambda:
     Type: AWS::Serverless::Function
     Properties:
@@ -24,9 +54,15 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: integration-deploy-solomonyusuf
+          DYNAMO_TABLE: RepoUploads
+          USERS_TABLE: Users
       Policies:
         - S3FullAccessPolicy:
             BucketName: integration-deploy-solomonyusuf
+        - DynamoDBCrudPolicy:
+            TableName: RepoUploads
+        - DynamoDBCrudPolicy:
+            TableName: Users
       Events:
         ApiEvent:
           Type: Api
