@@ -1,11 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: GitHub OAuth Lambda
+Description: GitHub OAuth Lambda (isolated API)
 Globals:
   Function:
     Runtime: nodejs18.x
     Timeout: 20
 Resources:
+  OAuthApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: OAuthApi
+      StageName: Prod
+      EndpointConfiguration: REGIONAL
   GitHubOAuthLambda:
     Type: AWS::Serverless::Function
     Properties:
@@ -14,11 +20,13 @@ Resources:
         Variables:
           GITHUB_CLIENT_ID: Ov23li1hTQlkn4BALtEq
           GITHUB_CLIENT_SECRET: 10f141255a59e3ce8ef5be3f2a55186f6c8cdc88
-          REDIRECT_URI: https://n0bmcwctpk.execute-api.eu-north-1.amazonaws.com/Prod/oauth/callback
+          REDIRECT_URI: https://oj8iug0a8a.execute-api.eu-north-1.amazonaws.com/Prod/oauth/callback
       Events:
         OAuthCallback:
           Type: Api
           Properties:
+            RestApiId:
+              Ref: OAuthApiGateway
             Path: /oauth/callback
             Method: get
       CodeUri: GitHubOAuthLambda
@@ -28,4 +36,4 @@ Outputs:
   GitHubOAuthApiUrl:
     Description: API Gateway endpoint for GitHub OAuth callback
     Value:
-      Fn::Sub: https://${GitHubOAuthLambda}.execute-api.${AWS::Region}.amazonaws.com/Prod/oauth/callback
+      Fn::Sub: https://${OAuthApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/oauth/callback

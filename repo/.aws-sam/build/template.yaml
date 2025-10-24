@@ -7,6 +7,11 @@ Globals:
     Timeout: 20
     MemorySize: 256
 Resources:
+  FetchGitHubReposApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: FetchGitHubReposApi
+      StageName: Prod
   FetchGitHubReposLambda:
     Type: AWS::Serverless::Function
     Properties:
@@ -19,6 +24,8 @@ Resources:
         ReposApi:
           Type: Api
           Properties:
+            RestApiId:
+              Ref: FetchGitHubReposApi
             Path: /repos
             Method: get
       CodeUri: FetchGitHubReposLambda
@@ -28,4 +35,4 @@ Outputs:
   FetchGitHubReposApiUrl:
     Description: API Gateway endpoint to fetch GitHub repos
     Value:
-      Fn::Sub: https://${FetchGitHubReposLambda}.execute-api.${AWS::Region}.amazonaws.com/Prod/repos
+      Fn::Sub: https://${FetchGitHubReposApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/repos

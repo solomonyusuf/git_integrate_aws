@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Deploy selected GitHub repo folder to S3 (isolated API)
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs18.x
+    MemorySize: 512
+Resources:
+  DeployApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: DeployRepoApi
+      StageName: Prod
+      EndpointConfiguration: REGIONAL
+  DeployRepoLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.handler
+      CodeUri: DeployRepoLambda
+      Environment:
+        Variables:
+          BUCKET_NAME: my-potentx-deployments
+      Policies:
+      - S3FullAccessPolicy:
+          BucketName: my-potentx-deployments
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: DeployApiGateway
+            Path: /deploy
+            Method: get
+    Metadata:
+      SamResourceId: DeployRepoLambda
+Outputs:
+  DeployRepoApiUrl:
+    Description: API Gateway endpoint to deploy repo folder
+    Value:
+      Fn::Sub: https://${DeployApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/deploy
